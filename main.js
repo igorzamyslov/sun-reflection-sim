@@ -126,7 +126,7 @@ function draw() {
 
     state.windows.forEach((win, index) => {
         const line = getWindowLine(win);
-        ctx.strokeStyle = state.selectedWindowIndex === index ? 'red' : 'lightblue';
+        ctx.strokeStyle = state.selectedWindowIndex === index ? 'red' : 'blue';
         ctx.lineWidth = 10;
         ctx.beginPath();
         ctx.moveTo(line.p1.x, line.p1.y);
@@ -180,54 +180,21 @@ function draw() {
 }
 
 function drawOmniLight() {
+    // 1. Draw all light sources first
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     state.windows.forEach(win => {
         const winLine = getWindowLine(win);
         const lightSource = { x: (winLine.p1.x + winLine.p2.x) / 2, y: (winLine.p1.y + winLine.p2.y) / 2 };
-        
-        const lightPolygon = new Path2D();
-        lightPolygon.moveTo(winLine.p1.x, winLine.p1.y);
-        const numFanRays = 20;
-        for (let i = 0; i <= numFanRays; i++) {
-            let angle;
-            if (win.wall === 'top')    angle = (i / numFanRays) * Math.PI;
-            if (win.wall === 'bottom') angle = (i / numFanRays) * Math.PI + Math.PI;
-            if (win.wall === 'left')   angle = (i / numFanRays) * Math.PI - Math.PI / 2;
-            if (win.wall === 'right')  angle = (i / numFanRays) * Math.PI + Math.PI / 2;
-            const rayDir = { x: Math.cos(angle), y: Math.sin(angle) };
-            const wallT = intersectRayWithRoom(lightSource, rayDir);
-            lightPolygon.lineTo(lightSource.x + rayDir.x * wallT, lightSource.y + rayDir.y * wallT);
-        }
-        lightPolygon.closePath();
+        const lightPolygon = createLightPolygon(win, lightSource);
         
         const gradient = ctx.createRadialGradient(lightSource.x, lightSource.y, win.width / 2, lightSource.x, lightSource.y, state.room.height);
-        gradient.addColorStop(0, 'rgba(255, 165, 0, 0.4)');
+        gradient.addColorStop(0, 'rgba(255, 165, 0, 0.5)');
         gradient.addColorStop(1, 'rgba(255, 165, 0, 0)');
         ctx.fillStyle = gradient;
         ctx.fill(lightPolygon);
 
-        // Shadow for Monitor
-        const monitorPoints = getMonitorPoints();
-        castShadow(lightSource, monitorPoints);
-
-        // Shadow for Head
-        const head = state.head;
-        const distToHead = Math.hypot(head.x - lightSource.x, head.y - lightSource.y);
-        const angleToHead = Math.atan2(head.y - lightSource.y, head.x - lightSource.x);
-        const tangentSpread = Math.asin(head.radius / distToHead);
-        const p1 = {
-            x: head.x + head.radius * Math.cos(angleToHead - tangentSpread + Math.PI/2),
-            y: head.y + head.radius * Math.sin(angleToHead - tangentSpread + Math.PI/2)
-        };
-        const p2 = {
-            x: head.x + head.radius * Math.cos(angleToHead + tangentSpread - Math.PI/2),
-            y: head.y + head.radius * Math.sin(angleToHead + tangentSpread - Math.PI/2)
-        };
-        castShadow(lightSource, [p1, p2]);
-
-
-        // --- Reflection Polygon ---
+        // Reflections
         const monitorScreen = getMonitorScreenLine();
         const monitorCenter = {x: (monitorScreen.p1.x + monitorScreen.p2.x)/2, y: (monitorScreen.p1.y + monitorScreen.p2.y)/2};
         if (ctx.isPointInPath(lightPolygon, monitorCenter.x, monitorCenter.y)) {
@@ -248,7 +215,7 @@ function drawOmniLight() {
                 reflectionPoly.lineTo(monitorScreen.p2.x, monitorScreen.p2.y);
                 reflectionPoly.closePath();
                 const reflectionGradient = ctx.createRadialGradient(intersection.x, intersection.y, 0, intersection.x, intersection.y, state.room.height);
-                reflectionGradient.addColorStop(0, 'rgba(255, 0, 0, 0.4)');
+                reflectionGradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
                 reflectionGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
                 ctx.fillStyle = reflectionGradient;
                 ctx.fill(reflectionPoly);
@@ -256,9 +223,59 @@ function drawOmniLight() {
         }
     });
     ctx.restore();
+
+    // 2. Draw all shadows
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(40, 40, 40, 0.7)';
+    state.windows.forEach(win => {
+        const winLine = getWindowLine(win);
+        const lightSource = { x: (winLine.p1.x + winLine.p2.x) / 2, y: (winLine.p1.y + winLine.p2.y) / 2 };
+
+        const monitorPoints = getMonitorPoints();
+        const monitorShadow = createShadowPolygon(lightSource, monitorPoints);
+        ctx.fill(monitorShadow);
+
+        const head = state.head;
+        const distToHead = Math.hypot(head.x - lightSource.x, head.y - lightSource.y);
+        if (distToHead > head.radius) { // only cast shadow if not inside the head
+            const angleToHead = Math.atan2(head.y - lightSource.y, head.x - lightSource.x);
+            const tangentSpread = Math.asin(head.radius / distToHead);
+            const p1 = {
+                x: head.x + head.radius * Math.cos(angleToHead - tangentSpread + Math.PI/2),
+                y: head.y + head.radius * Math.sin(angleToHead - tangentSpread + Math.PI/2)
+            };
+            const p2 = {
+                x: head.x + head.radius * Math.cos(angleToHead + tangentSpread - Math.PI/2),
+                y: head.y + head.radius * Math.sin(angleToHead + tangentSpread - Math.PI/2)
+            };
+            const headShadow = createShadowPolygon(lightSource, [p1, p2]);
+            ctx.fill(headShadow);
+        }
+    });
+    ctx.restore();
 }
 
-function castShadow(lightSource, points) {
+function createLightPolygon(win, lightSource) {
+    const winLine = getWindowLine(win);
+    const lightPolygon = new Path2D();
+    lightPolygon.moveTo(winLine.p1.x, winLine.p1.y);
+    const numFanRays = 20;
+    for (let i = 0; i <= numFanRays; i++) {
+        let angle;
+        if (win.wall === 'top')    angle = (i / numFanRays) * Math.PI;
+        if (win.wall === 'bottom') angle = (i / numFanRays) * Math.PI + Math.PI;
+        if (win.wall === 'left')   angle = (i / numFanRays) * Math.PI - Math.PI / 2;
+        if (win.wall === 'right')  angle = (i / numFanRays) * Math.PI + Math.PI / 2;
+        const rayDir = { x: Math.cos(angle), y: Math.sin(angle) };
+        const wallT = intersectRayWithRoom(lightSource, rayDir);
+        lightPolygon.lineTo(lightSource.x + rayDir.x * wallT, lightSource.y + rayDir.y * wallT);
+    }
+    lightPolygon.closePath();
+    return lightPolygon;
+}
+
+function createShadowPolygon(lightSource, points) {
     const shadowPolygon = new Path2D();
     const shadowLength = 2000;
     const angles = points.map(p => Math.atan2(p.y - lightSource.y, p.x - lightSource.x));
@@ -273,11 +290,7 @@ function castShadow(lightSource, points) {
     shadowPolygon.lineTo(maxPoint.x + Math.cos(maxAngle) * shadowLength, maxPoint.y + Math.sin(maxAngle) * shadowLength);
     shadowPolygon.lineTo(maxPoint.x, maxPoint.y);
     shadowPolygon.closePath();
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'black';
-    ctx.fill(shadowPolygon);
-    ctx.restore();
+    return shadowPolygon;
 }
 
 function intersectRayWithRoom(rayOrigin, rayDir) {
