@@ -326,12 +326,12 @@ canvas.addEventListener('mousedown', (e) => {
     const angle = state.monitor.rotation * Math.PI / 180;
     const handleX = state.monitor.x + (state.monitor.width / 2 + handleOffset) * Math.cos(angle);
     const handleY = state.monitor.y + (state.monitor.width / 2 + handleOffset) * Math.sin(angle);
-    if (Math.hypot(pos.x - handleX, pos.y - handleY) < 10) {
+    if (Math.hypot(pos.x - handleX, pos.y - handleY) < 25) { // Increased hitbox
         state.dragging = { type: 'rotate', initialPos: pos, initialObj: { ...state.monitor } };
         return;
     }
 
-    if (Math.hypot(pos.x - state.head.x, pos.y - state.head.y) < state.head.radius) {
+    if (Math.hypot(pos.x - state.head.x, pos.y - state.head.y) < state.head.radius + 20) { // Increased hitbox
         state.dragging = { type: 'head', initialPos: pos, initialObj: { ...state.head } };
         return;
     }
@@ -348,7 +348,11 @@ canvas.addEventListener('mousedown', (e) => {
     for (let i = 1; i < standPoints.length; i++) standPath.lineTo(standPoints[i].x, standPoints[i].y);
     standPath.closePath();
 
-    if (ctx.isPointInPath(monitorPath, pos.x, pos.y) || ctx.isPointInPath(standPath, pos.x, pos.y)) {
+    // Add a general circular hitbox for the whole monitor for easier grabbing
+    if (ctx.isPointInPath(monitorPath, pos.x, pos.y) 
+        || ctx.isPointInPath(standPath, pos.x, pos.y) 
+        || Math.hypot(pos.x - state.monitor.x, pos.y - state.monitor.y) < state.monitor.width * 0.75) 
+    {
         state.dragging = { type: 'monitor', initialPos: pos, initialObj: { ...state.monitor } };
         return;
     }
@@ -357,7 +361,7 @@ canvas.addEventListener('mousedown', (e) => {
         const win = state.windows[i];
         const line = getWindowLine(win);
         const dist = Math.abs((line.p2.x-line.p1.x)*(line.p1.y-pos.y) - (line.p1.x-pos.x)*(line.p2.y-line.p1.y)) / Math.hypot(line.p2.x-line.p1.x, line.p2.y-line.p1.y);
-        if (dist < 10) {
+        if (dist < 30) { // Increased hitbox
              state.dragging = { type: 'window', index: i, initialPos: pos, initialObj: { ...win } };
              state.selectedWindowIndex = i;
              removeWindowBtn.disabled = false;
