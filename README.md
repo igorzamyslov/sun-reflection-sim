@@ -1,5 +1,7 @@
 # Sun Reflection Simulator
 
+**Live Demo:** [https://igorzamyslov.github.io/sun-reflection-sim/](https://igorzamyslov.github.io/sun-reflection-sim/)
+
 This is a 2D web-based application that simulates how sunlight entering a room through windows reflects off a monitor. It allows users to dynamically configure the room layout, window placement, and the position of a monitor and a person to see the resulting light reflections and shadows in real-time.
 
 This entire project was created using the Gemini CLI.
